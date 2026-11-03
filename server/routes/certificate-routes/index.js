@@ -6,11 +6,14 @@ const {
   getCourseCertificate,
 } = require("../../controllers/certificate-controller/index");
 
+const authenticate = require("../../middleware/auth-middleware");
+const { requireSelf, bindBodyUser } = require("../../middleware/authorize");
+
 const router = express.Router();
 
-router.post("/generate", generateCertificate);
-router.get("/user/:userId", getUserCertificates);
+router.post("/generate", authenticate, bindBodyUser("userId"), generateCertificate);
+router.get("/user/:userId", authenticate, requireSelf("userId"), getUserCertificates);
 router.get("/verify/:certificateId", verifyCertificate);
-router.get("/course/:userId/:courseId", getCourseCertificate);
+router.get("/course/:userId/:courseId", authenticate, requireSelf("userId"), getCourseCertificate);
 
 module.exports = router;

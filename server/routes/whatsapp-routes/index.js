@@ -1,8 +1,9 @@
 const express = require("express");
+const authenticate = require("../../middleware/auth-middleware");
 const router = express.Router();
 const { sendWhatsAppNotification } = require("../../helpers/whatsapp");
 
-router.post("/send", async (req, res) => {
+router.post("/send", authenticate, async (req, res) => {
   try {
     const { phone, type, data } = req.body;
     if (!phone) {

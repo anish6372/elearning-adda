@@ -9,6 +9,8 @@ const UserSchema = new mongoose.Schema({
   isGoogleUser: { type: Boolean, default: false },
   isTwoFactorEnabled: { type: Boolean, default: false },
   twoFactorSecret: String,
+  // sha256 hashes of active refresh tokens (supports rotation + revocation)
+  refreshTokenHashes: { type: [String], default: [] },
 });
 
 module.exports = mongoose.model("User", UserSchema);

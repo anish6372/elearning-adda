@@ -7,13 +7,18 @@ const {
   verifyEnable2FA,
   validate2FA,
   disable2FA,
+  refreshSession,
+  logoutUser,
 } = require("../../controllers/auth-controller/index");
 const authenticateMiddleware = require("../../middleware/auth-middleware");
+const { validate, registerSchema, loginSchema } = require("../../middleware/validate");
 const router = express.Router();
 
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+router.post("/register", validate(registerSchema), registerUser);
+router.post("/login", validate(loginSchema), loginUser);
 router.post("/google", googleAuth);
+router.post("/refresh", refreshSession);
+router.post("/logout", logoutUser);
 
 // 2FA Routes
 router.post("/2fa/setup", authenticateMiddleware, setup2FA);

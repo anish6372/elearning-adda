@@ -4,6 +4,7 @@ const Course = require("../../models/Course");
 const User = require("../../models/User");
 const QRCode = require("qrcode");
 const crypto = require("crypto");
+const { sendCertificateEmail } = require("../../helpers/queue");
 
 // POST /certificates/generate — auto-generate a certificate for a completed course
 const generateCertificate = async (req, res) => {
@@ -53,6 +54,16 @@ const generateCertificate = async (req, res) => {
       completionDate: progress.completionDate || new Date(),
       certificateId,
       qrCodeDataUrl,
+    });
+
+    // PDF rendering + email happen in the background queue
+    sendCertificateEmail({
+      email: user.userEmail,
+      userName: user.userName,
+      courseTitle: course.title,
+      instructorName: course.instructorName,
+      completionDate: certificate.completionDate,
+      certificateId,
     });
 
     return res.json({ success: true, data: certificate });

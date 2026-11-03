@@ -2,6 +2,32 @@ const CourseProgress = require("../../models/CourseProgress");
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
 
+// Saves how far into a lecture the student is (called every few seconds by the player)
+const saveLecturePosition = async (req, res) => {
+  try {
+    const { userId, courseId, lectureId, position } = req.body;
+
+    // Try to update an existing lecture entry first, then fall back to pushing a new one
+    const updated = await CourseProgress.updateOne(
+      { userId, courseId, "lecturesProgress.lectureId": lectureId },
+      { $set: { "lecturesProgress.$.position": position } }
+    );
+
+    if (updated.matchedCount === 0) {
+      await CourseProgress.updateOne(
+        { userId, courseId },
+        { $push: { lecturesProgress: { lectureId, viewed: false, position } } },
+        { upsert: true }
+      );
+    }
+
+    res.status(200).json({ success: true });
+  } catch (e) {
+    console.log(e);
+    res.status(500).json({ success: false, message: "Some error occured!" });
+  }
+};
+
 //mark current lecture as viewed
 const markCurrentLectureAsViewed = async (req, res) => {
   try {
@@ -231,6 +257,7 @@ const getProgressSummaryForStudent = async (req, res) => {
 };
 
 module.exports = {
+  saveLecturePosition,
   markCurrentLectureAsViewed,
   getCurrentCourseProgress,
   resetCurrentCourseProgress,

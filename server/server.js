@@ -1,68 +1,43 @@
 require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
+const http = require("http");
 const mongoose = require("mongoose");
-const authRoutes = require("./routes/auth-routes/index");
-const mediaRoutes = require("./routes/instructor-routes/media-routes");
-const instructorCourseRoutes = require("./routes/instructor-routes/course-routes");
-const studentViewCourseRoutes = require("./routes/student-routes/course-routes");
-const studentViewOrderRoutes = require("./routes/student-routes/order-routes");
-const studentCoursesRoutes = require("./routes/student-routes/student-courses-routes");
-const studentCourseProgressRoutes = require("./routes/student-routes/course-progress-routes");
-const aiRoutes = require("./routes/ai-routes/index");
-const reviewRoutes = require("./routes/review-routes/index");
-const certificateRoutes = require("./routes/certificate-routes/index");
-const whatsappRoutes = require("./routes/whatsapp-routes/index");
-const jobRoutes = require("./routes/job-routes/index");
-
+const app = require("./app");
 const { initElasticsearch } = require("./helpers/elasticsearch");
+const { getJwtSecret } = require("./helpers/jwt");
+const { initQueues } = require("./helpers/queue");
+const { initSocket } = require("./helpers/socket");
+const { logger } = require("./helpers/observability");
 
-const app = express();
+getJwtSecret(); // fail fast if JWT_SECRET is missing
+
 const PORT = process.env.PORT || 5001;
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/elearning";
 
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST", "DELETE", "PUT"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-app.use(express.json());
+// Socket.io shares the HTTP server (and port) with Express
+const server = http.createServer(app);
+initSocket(server);
 
 //database connection
 mongoose
   .connect(MONGO_URI)
   .then(() => {
-    console.log("mongodb is connected");
+    logger.info("mongodb is connected");
     initElasticsearch();
+    initQueues();
   })
-  .catch((e) => console.log(e));
+  .catch((e) => logger.error(e, "mongodb connection failed"));
 
+server.listen(PORT, () => {
+  logger.info(`Server is now running on port ${PORT}`);
+});
 
-//routes configuration
-app.use("/auth", authRoutes);
-app.use("/media", mediaRoutes);
-app.use("/instructor/course", instructorCourseRoutes);
-app.use("/student/course", studentViewCourseRoutes);
-app.use("/student/order", studentViewOrderRoutes);
-app.use("/student/courses-bought", studentCoursesRoutes);
-app.use("/student/course-progress", studentCourseProgressRoutes);
-app.use("/ai", aiRoutes);
-app.use("/reviews", reviewRoutes);
-app.use("/certificates", certificateRoutes);
-app.use("/whatsapp", whatsappRoutes);
-app.use("/jobs", jobRoutes);
-
-app.use((err, req, res, next) => {
-  console.log(err.stack);
-  res.status(500).json({
-    success: false,
-    message: "Something went wrong",
+// Graceful shutdown: stop accepting connections, let in-flight requests finish, then close the DB
+const shutdown = (signal) => {
+  logger.info(`${signal} received, shutting down`);
+  server.close(() => {
+    mongoose.connection.close(false).finally(() => process.exit(0));
   });
-});
-
-app.listen(PORT, () => {
-  console.log(`Server is now running on port ${PORT}`);
-});
+  setTimeout(() => process.exit(1), 10000).unref();
+};
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

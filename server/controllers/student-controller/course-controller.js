@@ -1,8 +1,32 @@
 const Course = require("../../models/Course");
 const StudentCourses = require("../../models/StudentCourses");
 const { searchCoursesElastic } = require("../../helpers/elasticsearch");
+const { getCached, setCached } = require("../../helpers/redis");
 
+const COURSE_LIST_CACHE_PREFIX = "courses:list:";
+const COURSE_LIST_TTL_SECONDS = 300;
+
+// Read-through Redis cache keyed by the query string; invalidated when a course changes.
 const getAllStudentViewCourses = async (req, res) => {
+  const key = COURSE_LIST_CACHE_PREFIX + JSON.stringify(req.query);
+  const cached = await getCached(key);
+  if (cached) {
+    res.set("X-Cache", "HIT");
+    return res.status(200).json(cached);
+  }
+
+  res.set("X-Cache", "MISS");
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode === 200 && body?.success) {
+      setCached(key, body, COURSE_LIST_TTL_SECONDS);
+    }
+    return originalJson(body);
+  };
+  return fetchStudentViewCourses(req, res);
+};
+
+const fetchStudentViewCourses = async (req, res) => {
   try {
     const {
       category = [],

@@ -33,4 +33,9 @@ const CourseSchema = new mongoose.Schema({
   isPublised: Boolean,
 });
 
+CourseSchema.index({ instructorId: 1 });
+// Catalog filters + sort used by the student course list
+CourseSchema.index({ category: 1, level: 1, primaryLanguage: 1, pricing: 1 });
+CourseSchema.index({ "students.studentId": 1 });
+
 module.exports = mongoose.model("Course", CourseSchema);

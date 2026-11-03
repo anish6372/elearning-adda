@@ -14,4 +14,6 @@ const StudentCoursesSchema = new mongoose.Schema({
   ],
 });
 
+StudentCoursesSchema.index({ userId: 1 });
+
 module.exports = mongoose.model("StudentCourses", StudentCoursesSchema);

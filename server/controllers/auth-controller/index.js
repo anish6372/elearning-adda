@@ -2,8 +2,108 @@ const User = require("../../models/User");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
+const {
+  signToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  hashToken,
+  REFRESH_TOKEN_TTL_MS,
+} = require("../../helpers/jwt");
 const speakeasy = require("speakeasy");
 const QRCode = require("qrcode");
+
+
+const REFRESH_COOKIE = "refreshToken";
+const MAX_ACTIVE_SESSIONS = 5;
+
+const refreshCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax",
+  secure: process.env.NODE_ENV === "production",
+  path: "/auth",
+  maxAge: REFRESH_TOKEN_TTL_MS,
+};
+
+const buildAccessToken = (user) =>
+  signToken({
+    _id: user._id,
+    userName: user.userName,
+    userEmail: user.userEmail,
+    role: user.role,
+  });
+
+// Issues a refresh token (httpOnly cookie, hash stored on the user) and returns a short-lived access token.
+const startSession = async (res, user) => {
+  const refreshToken = signRefreshToken(user._id);
+  const hashes = [...(user.refreshTokenHashes || []), hashToken(refreshToken)];
+  user.refreshTokenHashes = hashes.slice(-MAX_ACTIVE_SESSIONS);
+  await user.save();
+  res.cookie(REFRESH_COOKIE, refreshToken, refreshCookieOptions);
+  return buildAccessToken(user);
+};
+
+const refreshSession = async (req, res) => {
+  const token = req.cookies?.[REFRESH_COOKIE];
+  if (!token) {
+    return res.status(401).json({ success: false, message: "No refresh token" });
+  }
+
+  try {
+    const payload = verifyRefreshToken(token);
+    const user = await User.findById(payload._id);
+    const tokenHash = hashToken(token);
+
+    if (!user || !user.refreshTokenHashes.includes(tokenHash)) {
+      // Unknown token for a valid user means reuse of a rotated token: revoke every session.
+      if (user) {
+        user.refreshTokenHashes = [];
+        await user.save();
+      }
+      res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+      return res.status(401).json({ success: false, message: "Invalid refresh token" });
+    }
+
+    // Rotation: the used token is dropped and a new one is issued.
+    user.refreshTokenHashes = user.refreshTokenHashes.filter((h) => h !== tokenHash);
+    const accessToken = await startSession(res, user);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        accessToken,
+        user: {
+          _id: user._id,
+          userName: user.userName,
+          userEmail: user.userEmail,
+          role: user.role,
+          isTwoFactorEnabled: user.isTwoFactorEnabled,
+        },
+      },
+    });
+  } catch (e) {
+    res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+    return res.status(401).json({ success: false, message: "Invalid refresh token" });
+  }
+};
+
+const logoutUser = async (req, res) => {
+  const token = req.cookies?.[REFRESH_COOKIE];
+  if (token) {
+    try {
+      const payload = verifyRefreshToken(token);
+      await User.updateOne(
+        { _id: payload._id },
+        { $pull: { refreshTokenHashes: hashToken(token) } }
+      );
+    } catch (e) {
+      // token already invalid, nothing to revoke
+    }
+  }
+  res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions, maxAge: undefined });
+  return res.status(200).json({ success: true, message: "Logged out" });
+};
+
+const ALLOWED_ROLES = ["user", "instructor"];
 
 const registerUser = async (req, res) => {
 
@@ -24,7 +124,7 @@ const registerUser = async (req, res) => {
   const newUser = new User({
     userName,
     userEmail,
-    role: role || "user",
+    role: ALLOWED_ROLES.includes(role) ? role : "user",
     password: hashPassword,
   });
 
@@ -58,16 +158,7 @@ const loginUser = async (req, res) => {
     });
   }
 
-  const accessToken = jwt.sign(
-    {
-      _id: checkUser._id,
-      userName: checkUser.userName,
-      userEmail: checkUser.userEmail,
-      role: checkUser.role,
-    },
-    process.env.JWT_SECRET || "JWT_SECRET",
-    { expiresIn: "120m" }
-  );
+  const accessToken = await startSession(res, checkUser);
 
   res.status(200).json({
     success: true,
@@ -121,7 +212,7 @@ const googleAuth = async (req, res) => {
         userEmail: email,
         googleId,
         isGoogleUser: true,
-        role: role || "user",
+        role: ALLOWED_ROLES.includes(role) ? role : "user",
       });
       await user.save();
     } else if (!user.googleId) {
@@ -139,16 +230,7 @@ const googleAuth = async (req, res) => {
       });
     }
 
-    const accessToken = jwt.sign(
-      {
-        _id: user._id,
-        userName: user.userName,
-        userEmail: user.userEmail,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || "JWT_SECRET",
-      { expiresIn: "120m" }
-    );
+    const accessToken = await startSession(res, user);
 
     return res.status(200).json({
       success: true,
@@ -261,16 +343,7 @@ const validate2FA = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid 2FA Security Code" });
     }
 
-    const accessToken = jwt.sign(
-      {
-        _id: user._id,
-        userName: user.userName,
-        userEmail: user.userEmail,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || "JWT_SECRET",
-      { expiresIn: "120m" }
-    );
+    const accessToken = await startSession(res, user);
 
     res.status(200).json({
       success: true,
@@ -321,6 +394,8 @@ const disable2FA = async (req, res) => {
 };
 
 module.exports = {
+  refreshSession,
+  logoutUser,
   registerUser,
   loginUser,
   googleAuth,

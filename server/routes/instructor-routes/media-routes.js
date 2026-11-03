@@ -5,7 +5,12 @@ const {
   deleteMediaFromCloudinary,
 } = require("../../helpers/cloudinary");
 
+const authenticate = require("../../middleware/auth-middleware");
+const { authorize } = require("../../middleware/authorize");
+
 const router = express.Router();
+
+router.use(authenticate, authorize("instructor"));
 
 const upload = multer({ dest: "uploads/" });
 

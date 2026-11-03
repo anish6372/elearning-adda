@@ -2,6 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { initialSignInFormData, initialSignUpFormData } from "@/config";
 import {
   checkAuthService,
+  logoutService,
   loginService,
   registerService,
   googleAuthService,
@@ -171,6 +172,7 @@ export default function AuthProvider({ children }) {
   }
 
   function resetCredentials() {
+    logoutService();
     sessionStorage.removeItem("accessToken");
     setAuth({
       authenticate: false,

@@ -35,4 +35,11 @@ export default [
       ],
     },
   },
+  {
+    // Vitest globals (describe/it/expect/vi) enabled via test.globals in vite.config.js
+    files: ['**/*.test.{js,jsx}', 'src/test/**'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node, describe: 'readonly', it: 'readonly', expect: 'readonly', vi: 'readonly', beforeEach: 'readonly', afterEach: 'readonly', beforeAll: 'readonly', afterAll: 'readonly' },
+    },
+  },
 ]

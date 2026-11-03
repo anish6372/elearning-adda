@@ -41,6 +41,14 @@ export async function disable2FAService() {
   return data;
 }
 
+export async function logoutService() {
+  try {
+    await axiosInstance.post("/auth/logout");
+  } catch (e) {
+    // the local session is cleared regardless
+  }
+}
+
 export async function checkAuthService() {
   const { data } = await axiosInstance.get("/auth/check-auth");
 
@@ -269,3 +277,35 @@ export async function checkPlacementEligibilityService(userId) {
 
 
 
+
+export async function saveLecturePositionService(userId, courseId, lectureId, position) {
+  const { data } = await axiosInstance.post("/student/course-progress/position", {
+    userId,
+    courseId,
+    lectureId,
+    position,
+  });
+  return data;
+}
+
+export async function fetchInstructorAnalyticsService() {
+  const { data } = await axiosInstance.get("/instructor/course/analytics");
+  return data;
+}
+
+export async function fetchDiscussionsService(courseId, cursor) {
+  const { data } = await axiosInstance.get(`/discussions/${courseId}`, {
+    params: { limit: 10, ...(cursor && { cursor }) },
+  });
+  return data;
+}
+
+export async function addDiscussionQuestionService(courseId, text, lectureId) {
+  const { data } = await axiosInstance.post(`/discussions/${courseId}`, { text, lectureId });
+  return data;
+}
+
+export async function addDiscussionAnswerService(courseId, questionId, text) {
+  const { data } = await axiosInstance.post(`/discussions/${courseId}/${questionId}/answers`, { text });
+  return data;
+}

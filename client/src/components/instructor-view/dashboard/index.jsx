@@ -19,10 +19,23 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import AICurriculumGeneratorModal from "../AICurriculumGeneratorModal";
+import { fetchInstructorAnalyticsService } from "@/services";
+import RevenueChart from "./revenue-chart";
+
+const formatMoney = (value) => `$${Number(value || 0).toFixed(2)}`;
 
 function InstructorDashboard({ listOfCourses = [] }) {
   const navigate = useNavigate();
+  const [analytics, setAnalytics] = useState(null);
+
+  // Totals come from server-side aggregations over paid orders, progress and reviews
+  useEffect(() => {
+    fetchInstructorAnalyticsService()
+      .then((response) => response?.success && setAnalytics(response.data))
+      .catch(() => {});
+  }, [listOfCourses.length]);
 
   function calculateTotalStudentsAndProfit() {
     const { totalStudents, totalProfit, studentList, topCourse } =
@@ -64,20 +77,21 @@ function InstructorDashboard({ listOfCourses = [] }) {
   }
 
   const stats = calculateTotalStudentsAndProfit();
+  const thisMonth = analytics?.monthly?.[analytics.monthly.length - 1];
   const config = [
     {
       icon: Users,
       label: "Total Students",
-      value: stats.totalStudents,
-      change: "+24% this month",
+      value: analytics?.totalStudents ?? stats.totalStudents,
+      change: `${thisMonth?.sales || 0} new this month`,
       gradient: "from-blue-500/10 to-indigo-500/10 border-blue-500/20",
       iconColor: "text-blue-500",
     },
     {
       icon: DollarSign,
       label: "Total Revenue",
-      value: `$${Number(stats.totalProfit || 0).toFixed(2)}`,
-      change: "+18.5% growth",
+      value: formatMoney(analytics?.totalRevenue ?? stats.totalProfit),
+      change: `${formatMoney(thisMonth?.revenue)} this month`,
       gradient: "from-emerald-500/10 to-teal-500/10 border-emerald-500/20",
       iconColor: "text-emerald-500",
     },
@@ -92,8 +106,10 @@ function InstructorDashboard({ listOfCourses = [] }) {
     {
       icon: TrendingUp,
       label: "Top Course",
-      value: stats.topCourse?.title || "—",
-      change: stats.topCourse ? `$${stats.topCourse.revenue} revenue` : "No sales yet",
+      value: analytics?.topCourse?.title || stats.topCourse?.title || "—",
+      change: analytics?.topCourse
+        ? `${formatMoney(analytics.topCourse.revenue)} revenue`
+        : "No sales yet",
       gradient: "from-amber-500/10 to-orange-500/10 border-amber-500/20",
       iconColor: "text-amber-500",
     },
@@ -154,52 +170,14 @@ function InstructorDashboard({ listOfCourses = [] }) {
           <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
             <div>
               <CardTitle className="text-lg font-bold">Revenue & Enrollment Growth</CardTitle>
-              <p className="text-xs text-muted-foreground">Monthly performance trajectory across all courses</p>
+              <p className="text-xs text-muted-foreground">Paid orders over the last 6 months</p>
             </div>
             <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-3 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-              Live Overview
+              Last 6 months
             </span>
           </CardHeader>
           <CardContent className="pt-6">
-            {/* Custom SVG Sparkline & Bar Chart */}
-            <div className="h-48 w-full">
-              <svg viewBox="0 0 500 150" className="h-full w-full">
-                <defs>
-                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-
-                {/* Bars */}
-                <rect x="30" y="70" width="18" height="60" rx="4" fill="#818cf8" opacity="0.3" />
-                <rect x="90" y="50" width="18" height="80" rx="4" fill="#818cf8" opacity="0.4" />
-                <rect x="150" y="40" width="18" height="90" rx="4" fill="#818cf8" opacity="0.5" />
-                <rect x="210" y="30" width="18" height="100" rx="4" fill="#818cf8" opacity="0.6" />
-                <rect x="270" y="45" width="18" height="85" rx="4" fill="#818cf8" opacity="0.7" />
-                <rect x="330" y="20" width="18" height="110" rx="4" fill="#6366f1" opacity="0.85" />
-                <rect x="390" y="15" width="18" height="115" rx="4" fill="#4f46e5" />
-                <rect x="450" y="10" width="18" height="120" rx="4" fill="#4338ca" />
-
-                {/* Smooth trend curve */}
-                <path
-                  d="M 39 100 Q 100 70 159 65 T 279 60 T 399 25 T 459 20"
-                  fill="none"
-                  stroke="#4f46e5"
-                  strokeWidth="3"
-                />
-
-                {/* Labels */}
-                <text x="39" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">May</text>
-                <text x="99" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Jun</text>
-                <text x="159" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Jul</text>
-                <text x="219" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Aug</text>
-                <text x="279" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Sep</text>
-                <text x="339" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Oct</text>
-                <text x="399" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Nov</text>
-                <text x="459" y="145" fontSize="10" fill="#94a3b8" textAnchor="middle">Dec</text>
-              </svg>
-            </div>
+            <RevenueChart monthly={analytics?.monthly || []} />
           </CardContent>
         </Card>
 
@@ -213,15 +191,19 @@ function InstructorDashboard({ listOfCourses = [] }) {
           <CardContent className="space-y-4">
             <div className="rounded-xl bg-slate-50 dark:bg-slate-900 p-4 border space-y-1">
               <span className="text-xs font-semibold uppercase text-slate-500">Student Completion Rate</span>
-              <p className="text-xl font-bold text-slate-900 dark:text-white">94.2%</p>
-              <p className="text-xs text-emerald-600 font-medium">Top 5% among instructors</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">
+                {analytics ? `${analytics.completionRate}%` : "—"}
+              </p>
+              <p className="text-xs text-slate-500 font-medium">Of enrolled students who finished a course</p>
             </div>
 
             <div className="rounded-xl bg-slate-50 dark:bg-slate-900 p-4 border space-y-1">
               <span className="text-xs font-semibold uppercase text-slate-500">Average Student Rating</span>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold text-slate-900 dark:text-white">4.9 ⭐</span>
-                <span className="text-xs text-slate-500">(128 reviews)</span>
+                <span className="text-xl font-bold text-slate-900 dark:text-white">
+                  {analytics?.averageRating ? `${analytics.averageRating} ⭐` : "No ratings yet"}
+                </span>
+                <span className="text-xs text-slate-500">({analytics?.reviewCount || 0} reviews)</span>
               </div>
             </div>
 

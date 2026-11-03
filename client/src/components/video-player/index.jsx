@@ -19,6 +19,8 @@ function VideoPlayer({
   url,
   onProgressUpdate,
   progressData,
+  startAt = 0,
+  onPositionChange,
 }) {
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
@@ -31,14 +33,39 @@ function VideoPlayer({
   const playerRef = useRef(null);
   const playerContainerRef = useRef(null);
   const controlsTimeoutRef = useRef(null);
+  const resumedUrlRef = useRef(null);
+  const lastSavedRef = useRef(0);
+
+  const POSITION_SAVE_INTERVAL = 10; // seconds of playback between saves
+
+  function savePosition(seconds) {
+    if (!onPositionChange || seconds == null) return;
+    lastSavedRef.current = seconds;
+    onPositionChange(Math.floor(seconds));
+  }
+
+  // Resume once per video, unless the saved spot is basically the end
+  function handleReady() {
+    if (resumedUrlRef.current === url) return;
+    resumedUrlRef.current = url;
+    lastSavedRef.current = startAt;
+    const duration = playerRef.current?.getDuration() || 0;
+    if (startAt > 0 && (!duration || startAt < duration - 5)) {
+      playerRef.current?.seekTo(startAt, "seconds");
+    }
+  }
 
   function handlePlayAndPause() {
+    if (playing) savePosition(playerRef.current?.getCurrentTime());
     setPlaying(!playing);
   }
 
   function handleProgress(state) {
     if (!seeking) {
       setPlayed(state.played);
+    }
+    if (Math.abs(state.playedSeconds - lastSavedRef.current) >= POSITION_SAVE_INTERVAL) {
+      savePosition(state.playedSeconds);
     }
   }
 
@@ -144,6 +171,7 @@ function VideoPlayer({
         volume={volume}
         muted={muted}
         onProgress={handleProgress}
+        onReady={handleReady}
       />
       {showControls && (
         <div

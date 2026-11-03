@@ -19,9 +19,13 @@ import {
   markLectureAsViewedService,
   resetCourseProgressService,
   generateCertificateService,
+  saveLecturePositionService,
 } from "@/services";
-import { Check, ChevronLeft, ChevronRight, NotebookPen, Play } from "lucide-react";
-import { useContext, useEffect, useMemo, useState } from "react";
+import CourseDiscussion from "@/components/course-discussion";
+import { useSocket } from "@/context/socket-context";
+import { toast } from "@/hooks/use-toast";
+import { Check, ChevronLeft, ChevronRight, NotebookPen, Play, Users } from "lucide-react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import Confetti from "react-confetti";
 import WhatsAppNotifyModal from "@/components/common/WhatsAppNotifyModal";
 import { useNavigate, useParams } from "react-router-dom";
@@ -39,7 +43,11 @@ function StudentViewCourseProgressPage() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [isSideBarOpen, setIsSideBarOpen] = useState(true);
   const [note, setNote] = useState("");
+  const [activeLearners, setActiveLearners] = useState(0);
   const { id } = useParams();
+  const socket = useSocket();
+  // Latest saved position per lecture, so switching back and forth resumes correctly
+  const positionsRef = useRef({});
 
   const curriculum =
     studentCurrentCourseProgress?.courseDetails?.curriculum || [];
@@ -122,6 +130,42 @@ function StudentViewCourseProgressPage() {
     fetchCurrentCourseProgress();
   }, [id]);
 
+  // Real-time room for this course: live learner count + new lecture alerts
+  useEffect(() => {
+    if (!socket || !id) return undefined;
+    const join = () => socket.emit("course:join", { courseId: id });
+    const onPresence = ({ courseId, count }) => {
+      if (courseId === id) setActiveLearners(count);
+    };
+    const onLectureAdded = (payload) => {
+      toast({ title: "New content", description: payload.message });
+      fetchCurrentCourseProgress();
+    };
+
+    join();
+    socket.on("connect", join); // rejoin after a reconnect
+    socket.on("course:presence", onPresence);
+    socket.on("course:lecture-added", onLectureAdded);
+    return () => {
+      socket.emit("course:leave", { courseId: id });
+      socket.off("connect", join);
+      socket.off("course:presence", onPresence);
+      socket.off("course:lecture-added", onLectureAdded);
+    };
+  }, [socket, id]);
+
+  function handlePositionChange(seconds) {
+    if (!currentLecture?._id) return;
+    positionsRef.current[currentLecture._id] = seconds;
+    saveLecturePositionService(auth?.user?._id, id, currentLecture._id, seconds).catch(() => {});
+  }
+
+  const resumeAt =
+    positionsRef.current[currentLecture?._id] ??
+    studentCurrentCourseProgress?.progress?.find((item) => item.lectureId === currentLecture?._id)
+      ?.position ??
+    0;
+
   useEffect(() => {
     if (currentLecture?.progressValue === 1) updateCourseProgress();
   }, [currentLecture]);
@@ -169,6 +213,11 @@ function StudentViewCourseProgressPage() {
             </h1>
             <p className="hidden text-xs text-slate-400 md:block">
               {progressPercent}% complete · {viewedCount}/{curriculum.length} lectures
+              {activeLearners > 0 && (
+                <span className="ml-3 inline-flex items-center gap-1 text-emerald-400">
+                  <Users className="h-3 w-3" /> {activeLearners} learning now
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -195,6 +244,8 @@ function StudentViewCourseProgressPage() {
             url={currentLecture?.videoUrl}
             onProgressUpdate={setCurrentLecture}
             progressData={currentLecture}
+            startAt={resumeAt}
+            onPositionChange={handlePositionChange}
           />
           <div className="p-6">
             <h2 className="text-2xl font-bold">{lectureTitle}</h2>
@@ -206,7 +257,7 @@ function StudentViewCourseProgressPage() {
           }`}
         >
           <Tabs defaultValue="content" className="flex h-full flex-col">
-            <TabsList className="grid h-14 w-full grid-cols-3 rounded-none bg-[#14161c] p-0">
+            <TabsList className="grid h-14 w-full grid-cols-4 rounded-none bg-[#14161c] p-0">
               <TabsTrigger value="content" className="h-full rounded-none">
                 Content
               </TabsTrigger>
@@ -215,6 +266,9 @@ function StudentViewCourseProgressPage() {
               </TabsTrigger>
               <TabsTrigger value="notes" className="h-full rounded-none">
                 Notes
+              </TabsTrigger>
+              <TabsTrigger value="qa" className="h-full rounded-none">
+                Q&amp;A
               </TabsTrigger>
             </TabsList>
             <TabsContent value="content" className="mt-0 flex-1 overflow-hidden">
@@ -256,6 +310,11 @@ function StudentViewCourseProgressPage() {
                     {studentCurrentCourseProgress?.courseDetails?.description}
                   </p>
                 </div>
+              </ScrollArea>
+            </TabsContent>
+            <TabsContent value="qa" className="mt-0 flex-1 overflow-hidden">
+              <ScrollArea className="h-full">
+                <CourseDiscussion courseId={id} lectureId={currentLecture?._id} />
               </ScrollArea>
             </TabsContent>
             <TabsContent value="notes" className="mt-0 flex-1 overflow-hidden p-4">

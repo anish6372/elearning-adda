@@ -1,98 +1,114 @@
 import { Route, Routes } from "react-router-dom";
-import AuthPage from "./pages/auth";
+import { lazy, Suspense, useContext } from "react";
 import RouteGuard from "./components/route-guard";
-import { useContext } from "react";
 import { AuthContext } from "./context/auth-context";
-import InstructorDashboardpage from "./pages/instructor";
 import StudentViewCommonLayout from "./components/student-view/common-layout";
-import StudentHomePage from "./pages/student/home";
-import NotFoundPage from "./pages/not-found";
-import AddNewCoursePage from "./pages/instructor/add-new-course";
-import StudentViewCoursesPage from "./pages/student/courses";
-import StudentViewCourseDetailsPage from "./pages/student/course-details";
-import PaypalPaymentReturnPage from "./pages/student/payment-return";
-import StudentCoursesPage from "./pages/student/student-courses";
-import StudentViewCourseProgressPage from "./pages/student/course-progress";
-import CheckoutPage from "./pages/student/checkout";
-import CertificatesPage from "./pages/student/certificates";
-import CertificateVerifyPage from "./pages/student/certificate-verify";
-import StudentJobsPage from "./pages/student/jobs";
+import { Toaster } from "./components/ui/toaster";
+import { Skeleton } from "./components/ui/skeleton";
+
+// Route-level code splitting: each page is its own chunk, loaded on first visit
+const AuthPage = lazy(() => import("./pages/auth"));
+const InstructorDashboardpage = lazy(() => import("./pages/instructor"));
+const StudentHomePage = lazy(() => import("./pages/student/home"));
+const NotFoundPage = lazy(() => import("./pages/not-found"));
+const AddNewCoursePage = lazy(() => import("./pages/instructor/add-new-course"));
+const StudentViewCoursesPage = lazy(() => import("./pages/student/courses"));
+const StudentViewCourseDetailsPage = lazy(() => import("./pages/student/course-details"));
+const PaypalPaymentReturnPage = lazy(() => import("./pages/student/payment-return"));
+const StudentCoursesPage = lazy(() => import("./pages/student/student-courses"));
+const StudentViewCourseProgressPage = lazy(() => import("./pages/student/course-progress"));
+const CheckoutPage = lazy(() => import("./pages/student/checkout"));
+const CertificatesPage = lazy(() => import("./pages/student/certificates"));
+const CertificateVerifyPage = lazy(() => import("./pages/student/certificate-verify"));
+const StudentJobsPage = lazy(() => import("./pages/student/jobs"));
+
+function PageFallback() {
+  return (
+    <div className="page-wrap space-y-4 py-10">
+      <Skeleton className="h-8 w-1/3" />
+      <Skeleton className="h-64 w-full" />
+    </div>
+  );
+}
 
 function App() {
   const { auth } = useContext(AuthContext);
 
   return (
-    <Routes>
-      <Route
-        path="/auth"
-        element={
-          <RouteGuard
-            element={<AuthPage />}
-            authenticated={auth?.authenticate}
-            user={auth?.user}
-          />
-        }
-      />
-      <Route
-        path="/instructor"
-        element={
-          <RouteGuard
-            element={<InstructorDashboardpage />}
-            authenticated={auth?.authenticate}
-            user={auth?.user}
-          />
-        }
-      />
-      <Route
-        path="/instructor/create-new-course"
-        element={
-          <RouteGuard
-            element={<AddNewCoursePage />}
-            authenticated={auth?.authenticate}
-            user={auth?.user}
-          />
-        }
-      />
-      <Route
-        path="/instructor/edit-course/:courseId"
-        element={
-          <RouteGuard
-            element={<AddNewCoursePage />}
-            authenticated={auth?.authenticate}
-            user={auth?.user}
-          />
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <RouteGuard
-            element={<StudentViewCommonLayout />}
-            authenticated={auth?.authenticate}
-            user={auth?.user}
-          />
-        }
-      >
-        <Route path="" element={<StudentHomePage />} />
-        <Route path="home" element={<StudentHomePage />} />
-        <Route path="courses" element={<StudentViewCoursesPage />} />
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
         <Route
-          path="course/details/:id"
-          element={<StudentViewCourseDetailsPage />}
+          path="/auth"
+          element={
+            <RouteGuard
+              element={<AuthPage />}
+              authenticated={auth?.authenticate}
+              user={auth?.user}
+            />
+          }
         />
-        <Route path="payment-return" element={<PaypalPaymentReturnPage />} />
-        <Route path="checkout" element={<CheckoutPage />} />
-        <Route path="student-courses" element={<StudentCoursesPage />} />
         <Route
-          path="course-progress/:id"
-          element={<StudentViewCourseProgressPage />}
+          path="/instructor"
+          element={
+            <RouteGuard
+              element={<InstructorDashboardpage />}
+              authenticated={auth?.authenticate}
+              user={auth?.user}
+            />
+          }
         />
-        <Route path="certificates" element={<CertificatesPage />} />
-        <Route path="certificate-verify/:certificateId" element={<CertificateVerifyPage />} />
-        <Route path="jobs" element={<StudentJobsPage />} />
-      </Route>
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        <Route
+          path="/instructor/create-new-course"
+          element={
+            <RouteGuard
+              element={<AddNewCoursePage />}
+              authenticated={auth?.authenticate}
+              user={auth?.user}
+            />
+          }
+        />
+        <Route
+          path="/instructor/edit-course/:courseId"
+          element={
+            <RouteGuard
+              element={<AddNewCoursePage />}
+              authenticated={auth?.authenticate}
+              user={auth?.user}
+            />
+          }
+        />
+        <Route
+          path="/"
+          element={
+            <RouteGuard
+              element={<StudentViewCommonLayout />}
+              authenticated={auth?.authenticate}
+              user={auth?.user}
+            />
+          }
+        >
+          <Route path="" element={<StudentHomePage />} />
+          <Route path="home" element={<StudentHomePage />} />
+          <Route path="courses" element={<StudentViewCoursesPage />} />
+          <Route
+            path="course/details/:id"
+            element={<StudentViewCourseDetailsPage />}
+          />
+          <Route path="payment-return" element={<PaypalPaymentReturnPage />} />
+          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="student-courses" element={<StudentCoursesPage />} />
+          <Route
+            path="course-progress/:id"
+            element={<StudentViewCourseProgressPage />}
+          />
+          <Route path="certificates" element={<CertificatesPage />} />
+          <Route path="certificate-verify/:certificateId" element={<CertificateVerifyPage />} />
+          <Route path="jobs" element={<StudentJobsPage />} />
+        </Route>
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+      <Toaster />
+    </Suspense>
   );
 }
 

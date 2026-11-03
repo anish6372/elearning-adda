@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: elearning
+    folder: E-Learning
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

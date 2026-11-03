@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   server:
     build:
@@ -13,10 +11,25 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - ELASTICSEARCH_NODE=http://elasticsearch:9200
+      - CLIENT_URL=http://localhost:8080
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET in your shell or a root .env file}
     depends_on:
-      - mongo
-      - redis
-      - elasticsearch
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+
+  client:
+    build:
+      context: ./client
+      args:
+        VITE_API_URL: http://localhost:5001
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
 
   mongo:
     image: mongo:6.0
@@ -24,11 +37,19 @@ services:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
@@ -41,7 +62,29 @@ services:
     volumes:
       - es-data:/usr/share/elasticsearch/data
 
+  # Monitoring stack, started only with: docker compose --profile monitoring up
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    profiles: ["monitoring"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: ["monitoring"]
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   mongo-data:
   es-data:
-
